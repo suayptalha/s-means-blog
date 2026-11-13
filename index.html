@@ -519,7 +519,7 @@
           <strong>Superior Turing (<code>SM75</code>) hardware coverage:</strong> Upstream <code>e-means</code> <code>auto</code>/Triton paths fail on NVIDIA T4 (<code>SM75</code>) due to BF16 casting, <code>.bf16</code> PTX inline assembly, and <code>&gt;64 KB</code> shared-memory tiles. <code>s-means</code> runs cleanly across all 9 T4 workloads, beating Meta's native T4 baseline by <strong><code>+53.81%–+54.03%</code> MSE</strong>, <strong><code>0.881×</code> faster wall-clock latency</strong>, and <strong><code>0.360×</code> VRAM</strong>.
         </li>
         <li>
-          <strong>Strong CPU generalization with parity speed and memory:</strong> Across 12 strictly unseen CPU datasets (5 seeds each), <code>s-means</code> achieves <strong><code>+19.67%</code> mean Test MSE gain</strong> (<code>+21.30%</code> Train, <code>0</code> regressions) at <strong><code>1.051×</code> median CPU time vs <code>e-means</code></strong> (<strong><code>2.2×–31.0×</code> faster than <code>sklearn.cluster.MiniBatchKMeans</code></strong>) with <strong><code>0.0 MB</code> extra OS RSS overhead</strong>.
+          <strong>Strong CPU generalization with parity speed and memory:</strong> Across 12 strictly unseen CPU datasets (5 seeds each), <code>s-means</code> achieves <strong><code>+19.67%</code> mean Test MSE gain</strong> (<code>+21.30%</code> Train, <code>0</code> regressions) at <strong><code>0.977×</code> median CPU time vs <code>e-means</code></strong> (<strong><code>2.24×</code> median faster than equal-epoch <code>sklearn.cluster.MiniBatchKMeans</code></strong>, faster on 8/12 tasks up to <code>3.71×</code> while <code>sklearn</code> is faster on small/low-d workloads at <code>0.40×–0.98×</code>) with <strong><code>0.0 MB</code> extra OS RSS overhead</strong>.
         </li>
       </ul>
     </section>
@@ -694,7 +694,7 @@
               <th class="center">Test MSE Gain vs <code>e-means</code></th>
               <th class="center">Train MSE Gain vs <code>e-means</code></th>
               <th class="center"><code>s-means</code> CPU Time Ratio</th>
-              <th class="center"><code>sklearn</code> Time vs <code>e-means</code></th>
+              <th class="center"><code>sklearn</code> Time vs <code>e-means</code> (<code>vs s-means</code>)</th>
               <th class="center">Analytical Mem Ratio</th>
             </tr>
           </thead>
@@ -704,8 +704,8 @@
               <td class="left"><code>80k, 54d, k=256, T=3</code></td>
               <td class="center"><strong><code>+3.31%</code></strong></td>
               <td class="center"><code>+3.79%</code></td>
-              <td class="center"><strong><code>0.961×</code></strong></td>
-              <td class="center"><code>15.9×</code> slower</td>
+              <td class="center"><code>1.073×</code></td>
+              <td class="center"><code>3.39×</code> (<code>3.16×</code> vs <code>s</code>)</td>
               <td class="center"><strong><code>0.355×</code></strong></td>
             </tr>
             <tr>
@@ -713,8 +713,8 @@
               <td class="left"><code>80k, 54d, k=256, T=3</code></td>
               <td class="center"><code>+0.00%</code></td>
               <td class="center"><strong><code>+11.93%</code></strong></td>
-              <td class="center"><code>1.164×</code></td>
-              <td class="center"><code>15.5×</code> slower</td>
+              <td class="center"><code>1.033×</code></td>
+              <td class="center"><code>3.70×</code> (<code>3.59×</code> vs <code>s</code>)</td>
               <td class="center"><strong><code>0.355×</code></strong></td>
             </tr>
             <tr>
@@ -722,8 +722,8 @@
               <td class="left"><code>1.2k, 64d, k=64, T=5</code></td>
               <td class="center"><code>+0.03%</code></td>
               <td class="center"><code>+0.16%</code></td>
-              <td class="center"><code>1.047×</code></td>
-              <td class="center"><code>2.2×</code> slower</td>
+              <td class="center"><strong><code>0.982×</code></strong></td>
+              <td class="center"><code>0.74×</code> (<code>0.76×</code> vs <code>s</code>)</td>
               <td class="center"><code>1.009×</code></td>
             </tr>
             <tr>
@@ -731,8 +731,8 @@
               <td class="left"><code>1.2k, 64d, k=64, T=5</code></td>
               <td class="center"><code>+0.50%</code></td>
               <td class="center"><code>+1.77%</code></td>
-              <td class="center"><code>1.005×</code></td>
-              <td class="center"><code>2.4×</code> slower</td>
+              <td class="center"><strong><code>0.965×</code></strong></td>
+              <td class="center"><code>0.75×</code> (<code>0.78×</code> vs <code>s</code>)</td>
               <td class="center"><code>1.009×</code></td>
             </tr>
             <tr>
@@ -740,8 +740,8 @@
               <td class="left"><code>15k, 16d, k=128, T=3</code></td>
               <td class="center"><code>+0.27%</code></td>
               <td class="center"><code>-0.01%</code></td>
-              <td class="center"><strong><code>0.841×</code></strong></td>
-              <td class="center"><code>19.7×</code> slower</td>
+              <td class="center"><strong><code>0.972×</code></strong></td>
+              <td class="center"><code>0.39×</code> (<code>0.40×</code> vs <code>s</code>)</td>
               <td class="center"><code>1.006×</code></td>
             </tr>
             <tr>
@@ -749,8 +749,8 @@
               <td class="left"><code>15k, 256d, k=256, T=3</code></td>
               <td class="center"><strong><code>+37.62%</code></strong></td>
               <td class="center"><strong><code>+41.76%</code></strong></td>
-              <td class="center"><code>1.105×</code></td>
-              <td class="center"><code>14.3×</code> slower</td>
+              <td class="center"><code>1.173×</code></td>
+              <td class="center"><strong><code>4.35×</code> (<code>3.71×</code> vs <code>s</code>)</strong></td>
               <td class="center"><strong><code>0.839×</code></strong></td>
             </tr>
             <tr>
@@ -758,8 +758,8 @@
               <td class="left"><code>15k, 64d, k=256, T=2</code></td>
               <td class="center"><strong><code>+62.69%</code></strong></td>
               <td class="center"><strong><code>+63.55%</code></strong></td>
-              <td class="center"><code>1.022×</code></td>
-              <td class="center"><code>17.5×</code> slower</td>
+              <td class="center"><strong><code>0.891×</code></strong></td>
+              <td class="center"><code>2.04×</code> (<code>2.29×</code> vs <code>s</code>)</td>
               <td class="center"><code>1.004×</code></td>
             </tr>
             <tr>
@@ -767,8 +767,8 @@
               <td class="left"><code>12k, 128d, k=128, T=3</code></td>
               <td class="center"><code>+0.21%</code></td>
               <td class="center"><code>+0.02%</code></td>
-              <td class="center"><strong><code>0.966×</code></strong></td>
-              <td class="center"><code>15.9×</code> slower</td>
+              <td class="center"><strong><code>0.812×</code></strong></td>
+              <td class="center"><code>1.77×</code> (<code>2.18×</code> vs <code>s</code>)</td>
               <td class="center"><code>1.005×</code></td>
             </tr>
             <tr>
@@ -776,8 +776,8 @@
               <td class="left"><code>25k, 32d, k=128, T=3</code></td>
               <td class="center"><code>+2.25%</code></td>
               <td class="center"><code>+2.51%</code></td>
-              <td class="center"><code>1.055×</code></td>
-              <td class="center"><code>14.9×</code> slower</td>
+              <td class="center"><code>1.031×</code></td>
+              <td class="center"><code>1.47×</code> (<code>1.43×</code> vs <code>s</code>)</td>
               <td class="center"><strong><code>0.692×</code></strong></td>
             </tr>
             <tr>
@@ -785,8 +785,8 @@
               <td class="left"><code>50k, 128d, k=512, T=3</code></td>
               <td class="center"><strong><code>+57.20%</code></strong></td>
               <td class="center"><strong><code>+57.44%</code></strong></td>
-              <td class="center"><code>1.148×</code></td>
-              <td class="center"><strong><code>31.0×</code> slower</strong></td>
+              <td class="center"><code>1.092×</code></td>
+              <td class="center"><code>3.68×</code> (<code>3.37×</code> vs <code>s</code>)</td>
               <td class="center"><strong><code>0.439×</code></strong></td>
             </tr>
             <tr>
@@ -794,8 +794,8 @@
               <td class="left"><code>20k, 64d, k=192, T=1.5</code></td>
               <td class="center"><strong><code>+54.21%</code></strong></td>
               <td class="center"><strong><code>+54.31%</code></strong></td>
-              <td class="center"><code>1.077×</code></td>
-              <td class="center"><code>17.9×</code> slower</td>
+              <td class="center"><strong><code>0.911×</code></strong></td>
+              <td class="center"><code>2.13×</code> (<code>2.34×</code> vs <code>s</code>)</td>
               <td class="center"><code>1.005×</code></td>
             </tr>
             <tr>
@@ -803,8 +803,8 @@
               <td class="left"><code>15k, 4d, k=128, T=8</code></td>
               <td class="center"><strong><code>+17.76%</code></strong></td>
               <td class="center"><strong><code>+18.33%</code></strong></td>
-              <td class="center"><code>1.120×</code></td>
-              <td class="center"><code>22.4×</code> slower</td>
+              <td class="center"><strong><code>0.951×</code></strong></td>
+              <td class="center"><code>0.93×</code> (<code>0.98×</code> vs <code>s</code>)</td>
               <td class="center"><code>1.010×</code></td>
             </tr>
             <tr class="summary-row">
@@ -812,8 +812,8 @@
               <td class="left"><strong>5-Seed Mean</strong></td>
               <td class="center"><strong><code>+19.67%</code></strong></td>
               <td class="center"><strong><code>+21.30%</code></strong></td>
-              <td class="center"><strong>Med <code>1.051×</code></strong></td>
-              <td class="center"><strong><code>2.2×–31.0×</code></strong></td>
+              <td class="center"><strong>Med <code>0.977×</code></strong></td>
+              <td class="center"><strong>Med <code>1.91×</code> (<code>2.24×</code> vs <code>s</code>)</strong></td>
               <td class="center"><strong>Max <code>1.010×</code></strong></td>
             </tr>
           </tbody>
@@ -821,7 +821,7 @@
       </div>
 
       <p>
-        Real OS process RSS telemetry (<code>resource.getrusage(RUSAGE_SELF).ru_maxrss</code>) in isolated subprocesses confirms zero memory overhead (<code>955.09 MB</code> before and after on both <code>50k × 128D, k=512</code> and <code>100k × 64D, k=256, T=5</code>: <strong><code>0.0 MB</code> delta</strong>, vs <code>8192 × 4096</code> coarse tiles in <code>e-means</code>).
+        <code>MiniBatchKMeans</code> was evaluated with matched epoch budgets (<code>batch_size=max(em_b, 256)</code>, <code>max_iter=max(1, round(T))</code>, <code>n_init=1</code>, <code>max_no_improvement=None</code>, since <code>scikit-learn</code> defines <code>max_iter</code> as full-dataset passes rather than mini-batch steps). Under equal epochs, <code>s-means</code> is <strong><code>2.24×</code> median faster than <code>MiniBatchKMeans</code></strong> (faster on 8/12 tasks by <strong><code>1.43×–3.71×</code></strong> while also achieving lower Test MSE on 10/12 tasks—up to <strong><code>+37.51%</code></strong> on <code>gmm_iso_d64_T2</code> and <code>+14.42%</code> on <code>multiscale_4d_T8</code>); <code>sklearn</code>'s Cython loop is faster on small <code>n=1200</code> (<code>digits</code>: <code>0.76×–0.78×</code>) and low-dimensional <code>quality</code>-law runs (<code>uniform_cube_d16</code>: <code>0.40×</code>, where <code>d=16</code> takes ~351 <code>B=128</code> eager Python steps vs ~175 <code>B=256</code> steps). Real OS process RSS telemetry (<code>resource.getrusage(RUSAGE_SELF).ru_maxrss</code>) in isolated subprocesses confirms zero memory overhead (<code>956.1 MB</code> before and after on both <code>50k × 128D, k=512</code> and <code>100k × 64D, k=256, T=5</code>: <strong><code>0.0 MB</code> delta</strong>, vs <code>8192 × 4096</code> coarse tiles in <code>e-means</code>).
       </p>
 
       <h3>What Actually Matters? (Leave-One-Out Component Ablation)</h3>

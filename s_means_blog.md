@@ -28,7 +28,7 @@ Across **12 strictly unseen CPU datasets** and **3 NVIDIA GPU architectures (T4 
 * **1.0 epoch beats 8.0-epoch `e-means`:** On `200k × 128D, k=1024`, `s-means` at **$T = 1.0$ epoch** achieves **`32.2` Test MSE in `33 ms`** on A100 (and `30.8` MSE in `36 ms` on L4), more than **2× lower quantization error** than `e-means` at **$T = 8.0$ epochs** (`65.7` MSE in `36 ms` on A100; `64.4` MSE in `40 ms` on L4).
 * **Lower GPU peak workspace VRAM:** **`0.875×` median peak VRAM delta** vs `e-means` BF16 Triton on L4/A100 (`71.2 MB` vs `84.6 MB` at 1M points / `k=2048`, and **4.35× lower** than PyTorch Native `309.8 MB`), and **`0.360×` median peak VRAM** (`0.222×` at `1M × k=2048`) on T4.
 * **Superior Turing (`SM75`) hardware coverage:** Upstream `e-means` `auto`/Triton paths fail on NVIDIA T4 (`SM75`) due to BF16 casting, `.bf16` PTX inline assembly, and `>64 KB` shared-memory tiles. `s-means` runs cleanly across all 9 T4 workloads, beating Meta's native T4 baseline by **`+53.81%–+54.03%` MSE**, **`0.881×` faster wall-clock latency**, and **`0.360×` VRAM**.
-* **Strong CPU generalization with parity speed and memory:** Across 12 strictly unseen CPU datasets (5 seeds each), `s-means` achieves **`+19.67%` mean Test MSE gain** (`+21.30%` Train, `0` regressions) at **`1.051×` median CPU time vs `e-means`** (**`2.2×–31.0×` faster than `sklearn.cluster.MiniBatchKMeans`**) with **`0.0 MB` extra OS RSS overhead**.
+* **Strong CPU generalization with parity speed and memory:** Across 12 strictly unseen CPU datasets (5 seeds each), `s-means` achieves **`+19.67%` mean Test MSE gain** (`+21.30%` Train, `0` regressions) at **`0.977×` median CPU time vs `e-means`** (**`2.24×` median faster than equal-epoch `sklearn.cluster.MiniBatchKMeans`**, faster on 8/12 tasks up to `3.71×` while `sklearn` is faster on small/low-d workloads at `0.40×–0.98×`) with **`0.0 MB` extra OS RSS overhead**.
 
 ---
 
@@ -95,23 +95,23 @@ To confirm that `s-means` did not overfit the 8 EvoForest training datasets, we 
 
 ![CPU Unseen Generalization and Wall-Clock Speed](figures/fig6_cpu_unseen_summary.png)
 
-| Unseen CPU Dataset | Config (`n, d, k, T`) | Test MSE Gain vs `e-means` | Train MSE Gain vs `e-means` | `s-means` CPU Time Ratio | `sklearn` Time vs `e-means` | Analytical Mem Ratio |
+| Unseen CPU Dataset | Config (`n, d, k, T`) | Test MSE Gain vs `e-means` | Train MSE Gain vs `e-means` | `s-means` CPU Time Ratio | `sklearn` Time vs `e-means` (`vs s-means`) | Analytical Mem Ratio |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| `covtype_raw` | `80k, 54d, k=256, T=3` | **`+3.31%`** | `+3.79%` | **`0.961×`** | `15.9×` slower | **`0.355×`** |
-| `covtype_std` | `80k, 54d, k=256, T=3` | `+0.00%` | **`+11.93%`** | `1.164×` | `15.5×` slower | **`0.355×`** |
-| `digits_raw` | `1.2k, 64d, k=64, T=5` | `+0.03%` | `+0.16%` | `1.047×` | `2.2×` slower | `1.009×` |
-| `digits_std` | `1.2k, 64d, k=64, T=5` | `+0.50%` | `+1.77%` | `1.005×` | `2.4×` slower | `1.009×` |
-| `uniform_cube_d16` | `15k, 16d, k=128, T=3` | `+0.27%` | `-0.01%` | **`0.841×`** | `19.7×` slower | `1.006×` |
-| `highdim_zipf_d256` | `15k, 256d, k=256, T=3` | **`+37.62%`** | **`+41.76%`** | `1.105×` | `14.3×` slower | **`0.839×`** |
-| `gmm_iso_d64_T2` | `15k, 64d, k=256, T=2` | **`+62.69%`** | **`+63.55%`** | `1.022×` | `17.5×` slower | `1.004×` |
-| `stretched_inv2_d128` | `12k, 128d, k=128, T=3` | `+0.21%` | `+0.02%` | **`0.966×`** | `15.9×` slower | `1.005×` |
-| `manifold_rings_d32` | `25k, 32d, k=128, T=3` | `+2.25%` | `+2.51%` | `1.055×` | `14.9×` slower | **`0.692×`** |
-| `large_d128_k512` | `50k, 128d, k=512, T=3` | **`+57.20%`** | **`+57.44%`** | `1.148×` | **`31.0×` slower** | **`0.439×`** |
-| `frac_budget_T1p5` | `20k, 64d, k=192, T=1.5` | **`+54.21%`** | **`+54.31%`** | `1.077×` | `17.9×` slower | `1.005×` |
-| `multiscale_4d_T8` | `15k, 4d, k=128, T=8` | **`+17.76%`** | **`+18.33%`** | `1.120×` | `22.4×` slower | `1.010×` |
-| **Aggregate (12 Datasets)** | **5-Seed Mean** | **`+19.67%`** | **`+21.30%`** | **Med `1.051×`** | **`2.2×–31.0×`** | **Max `1.010×`** |
+| `covtype_raw` | `80k, 54d, k=256, T=3` | **`+3.31%`** | `+3.79%` | `1.073×` | `3.39×` (`3.16×` vs `s`) | **`0.355×`** |
+| `covtype_std` | `80k, 54d, k=256, T=3` | `+0.00%` | **`+11.93%`** | `1.033×` | `3.70×` (`3.59×` vs `s`) | **`0.355×`** |
+| `digits_raw` | `1.2k, 64d, k=64, T=5` | `+0.03%` | `+0.16%` | **`0.982×`** | `0.74×` (`0.76×` vs `s`) | `1.009×` |
+| `digits_std` | `1.2k, 64d, k=64, T=5` | `+0.50%` | `+1.77%` | **`0.965×`** | `0.75×` (`0.78×` vs `s`) | `1.009×` |
+| `uniform_cube_d16` | `15k, 16d, k=128, T=3` | `+0.27%` | `-0.01%` | **`0.972×`** | `0.39×` (`0.40×` vs `s`) | `1.006×` |
+| `highdim_zipf_d256` | `15k, 256d, k=256, T=3` | **`+37.62%`** | **`+41.76%`** | `1.173×` | **`4.35×` (`3.71×` vs `s`)** | **`0.839×`** |
+| `gmm_iso_d64_T2` | `15k, 64d, k=256, T=2` | **`+62.69%`** | **`+63.55%`** | **`0.891×`** | `2.04×` (`2.29×` vs `s`) | `1.004×` |
+| `stretched_inv2_d128` | `12k, 128d, k=128, T=3` | `+0.21%` | `+0.02%` | **`0.812×`** | `1.77×` (`2.18×` vs `s`) | `1.005×` |
+| `manifold_rings_d32` | `25k, 32d, k=128, T=3` | `+2.25%` | `+2.51%` | `1.031×` | `1.47×` (`1.43×` vs `s`) | **`0.692×`** |
+| `large_d128_k512` | `50k, 128d, k=512, T=3` | **`+57.20%`** | **`+57.44%`** | `1.092×` | `3.68×` (`3.37×` vs `s`) | **`0.439×`** |
+| `frac_budget_T1p5` | `20k, 64d, k=192, T=1.5` | **`+54.21%`** | **`+54.31%`** | **`0.911×`** | `2.13×` (`2.34×` vs `s`) | `1.005×` |
+| `multiscale_4d_T8` | `15k, 4d, k=128, T=8` | **`+17.76%`** | **`+18.33%`** | **`0.951×`** | `0.93×` (`0.98×` vs `s`) | `1.010×` |
+| **Aggregate (12 Datasets)** | **5-Seed Mean** | **`+19.67%`** | **`+21.30%`** | **Med `0.977×`** | **Med `1.91×` (`2.24×` vs `s`)** | **Max `1.010×`** |
 
-Real OS process RSS telemetry (`resource.getrusage(RUSAGE_SELF).ru_maxrss`) in isolated subprocesses confirms zero memory overhead (`955.09 MB` before and after on both `50k × 128D, k=512` and `100k × 64D, k=256, T=5`: **`0.0 MB` delta**, vs `8192 × 4096` coarse tiles in `e-means`).
+`MiniBatchKMeans` was evaluated with matched epoch budgets (`batch_size=max(em_b, 256)`, `max_iter=max(1, round(T))`, `n_init=1`, `max_no_improvement=None`, since `scikit-learn` defines `max_iter` as full-dataset passes rather than mini-batch steps). Under equal epochs, `s-means` is **`2.24×` median faster than `MiniBatchKMeans`** (faster on 8/12 tasks by **`1.43×–3.71×`** while also achieving lower Test MSE on 10/12 tasks—up to **`+37.51%`** on `gmm_iso_d64_T2` and `+14.42%` on `multiscale_4d_T8`); `sklearn`'s Cython loop is faster on small `n=1200` (`digits`: `0.76×–0.78×`) and low-dimensional `quality`-law runs (`uniform_cube_d16`: `0.40×`, where `d=16` takes ~351 `B=128` eager Python steps vs ~175 `B=256` steps). Real OS process RSS telemetry (`resource.getrusage(RUSAGE_SELF).ru_maxrss`) in isolated subprocesses confirms zero memory overhead (`956.1 MB` before and after on both `50k × 128D, k=512` and `100k × 64D, k=256, T=5`: **`0.0 MB` delta**, vs `8192 × 4096` coarse tiles in `e-means`).
 
 ### What Actually Matters? (Leave-One-Out Component Ablation)
 
