@@ -4,7 +4,8 @@
 **Şuayp Talha Kocabay**<sup>1,2,*</sup>, **Kamer Ali Yüksel**<sup>3</sup>, **Kerem Yalçın**<sup>2</sup>  
 
 <sup>1</sup> Poindexter Labs · <sup>2</sup> TÜBİTAK Science High School · <sup>3</sup> Feedzai  
-<sup>*</sup>Corresponding author: `stk@poindexterlabs.ai` · `kamer.yuksel@feedzai.com` · `54keremyalcin@gmail.com`  
+<sup>*</sup>Corresponding author: `stk@poindexterlabs.ai`  
+Co-authors: `kamer.yuksel@feedzai.com` · `54keremyalcin@gmail.com`  
 
 **Resources:**  
 - **GitHub Pages Blog:** [`suayptalha.github.io/s-means-blog`](https://suayptalha.github.io/s-means-blog/)  
