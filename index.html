@@ -486,6 +486,7 @@
         <a href="#gpu-benchmarks">5. Multi-GPU Benchmarks: T4 (SM75), L4 (SM89), and A100 (SM80)</a>
         <a href="#usage">6. Using s-means Today</a>
         <a href="#citation">Citation</a>
+        <a href="#references">References</a>
       </div>
     </div>
 
@@ -1079,13 +1080,72 @@ print(f"Backend={res.backend} ({res.dtype}) | MSE={res.mse:.2f} | Time={res.time
       <h2>Citation</h2>
 
       <p>
-        If you use <code>s-means</code> or reference our EvoForest discovery methodology in your research or engineering systems, please cite <a href="https://github.com/suayptalha/s-means" target="_blank" rel="noopener"><code>github.com/suayptalha/s-means</code></a> and EvoForest (<a href="https://arxiv.org/abs/2604.19761" target="_blank" rel="noopener">arXiv:2604.19761</a>).
+        If you use <code>s-means</code> or reference this article in your research or engineering systems, please cite <a href="https://suayptalha.github.io/s-means-blog/" target="_blank" rel="noopener"><code>suayptalha.github.io/s-means-blog</code></a>:
       </p>
+
+      <div class="code-wrapper">
+        <button class="copy-btn" type="button" onclick="copyCode(this)">Copy</button>
+        <pre><code>@misc{kocabay2026smeans,
+  title  = {s-means: outperforming e-means (which outperforms k-means)},
+  author = {Kocabay, {\c{S}}uayp Talha and Y{\"u}ksel, Kamer Ali and Yal{\c{c}}{\i}n, Kerem},
+  year   = {2026},
+  url    = {https://suayptalha.github.io/s-means-blog/},
+  note   = {Open-source package available at \url{https://github.com/suayptalha/s-means}}
+}</code></pre>
+      </div>
+    </section>
+
+    <hr class="section-sep" />
+
+    <section id="references">
+      <h2>References</h2>
+
+      <ol>
+        <li>
+          <strong>Swann Bessa, Pierre-Emmanuel Mazaré, Gergely Szilvasy, Hugo Touvron, David Picard, Matthijs Douze, and Hervé Jégou.</strong>
+          <em>&ldquo;e-means: outperforming k-means (in one-tenth the epochs).&rdquo;</em>
+          arXiv preprint arXiv:2611.09501 (2026).
+          <a href="https://arxiv.org/abs/2611.09501" target="_blank" rel="noopener"><code>arxiv.org/abs/2611.09501</code></a> ·
+          <a href="https://github.com/facebookresearch/faiss/tree/main/contrib/e_means" target="_blank" rel="noopener"><code>faiss/contrib/e_means</code></a>
+        </li>
+        <li>
+          <strong>Kamer Ali Yuksel and Hassan Sawaf.</strong>
+          <em>&ldquo;EvoForest: A Novel Machine-Learning Paradigm via Open-Ended Evolution of Computational Graphs.&rdquo;</em>
+          arXiv preprint arXiv:2604.19761 (2026).
+          <a href="https://arxiv.org/abs/2604.19761" target="_blank" rel="noopener"><code>arxiv.org/abs/2604.19761</code></a>
+        </li>
+        <li>
+          <strong>Stuart P. Lloyd.</strong>
+          <em>&ldquo;Least squares quantization in PCM.&rdquo;</em>
+          IEEE Transactions on Information Theory, Vol. 28, No. 2, pp. 129&ndash;137 (1982).
+        </li>
+        <li>
+          <strong>D. Sculley.</strong>
+          <em>&ldquo;Web-scale k-means clustering.&rdquo;</em>
+          Proceedings of the 19th International Conference on World Wide Web (WWW &rsquo;10), pp. 1177&ndash;1178 (2010). DOI: <code>10.1145/1772690.1772862</code>
+        </li>
+        <li>
+          <strong>Fabian Pedregosa, Gaël Varoquaux, Alexandre Gramfort, Vincent Michel, Bertrand Thirion, Olivier Grisel, Mathieu Blondel, Peter Prettenhofer, Ron Weiss, Vincent Dubourg, Jake Vanderplas, Alexandre Passos, David Cournapeau, Matthieu Brucher, Matthieu Perrot, and Édouard Duchesnay.</strong>
+          <em>&ldquo;Scikit-learn: Machine Learning in Python.&rdquo;</em>
+          Journal of Machine Learning Research (JMLR), Vol. 12, pp. 2825&ndash;2830 (2011).
+        </li>
+        <li>
+          <strong>Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Köpf, Edward Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala.</strong>
+          <em>&ldquo;PyTorch: An Imperative Style, High-Performance Deep Learning Library.&rdquo;</em>
+          Advances in Neural Information Processing Systems 32 (NeurIPS 2019).
+          <a href="https://arxiv.org/abs/1912.01703" target="_blank" rel="noopener"><code>arxiv.org/abs/1912.01703</code></a>
+        </li>
+        <li>
+          <strong>Philippe Tillet, H. T. Kung, and David Cox.</strong>
+          <em>&ldquo;Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations.&rdquo;</em>
+          Proceedings of the 3rd ACM SIGPLAN International Workshop on Machine Learning and Programming Languages (MAPL 2019).
+        </li>
+      </ol>
     </section>
 
     <footer class="page-footer">
       <span>s-means: outperforming e-means (which outperforms k-means)</span>
-      <span><a href="https://github.com/suayptalha/s-means" target="_blank" rel="noopener">github.com/suayptalha/s-means</a> · <a href="https://arxiv.org/abs/2604.19761" target="_blank" rel="noopener">EvoForest (arXiv:2604.19761)</a></span>
+      <span><a href="https://suayptalha.github.io/s-means-blog/" target="_blank" rel="noopener">suayptalha.github.io/s-means-blog</a> · <a href="https://github.com/suayptalha/s-means" target="_blank" rel="noopener">github.com/suayptalha/s-means</a></span>
     </footer>
   </main>
 
