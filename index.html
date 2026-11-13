@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>s-means: outperforming e-means (which outperforms k-means)</title>
+  <meta name="description" content="Scale- &amp; Distortion-Aware Mini-Batch Clustering discovered via EvoForest, with custom fused Triton CUDA kernels and scikit-learn compatibility." />
+  <meta property="og:title" content="s-means: outperforming e-means (which outperforms k-means)" />
+  <meta property="og:description" content="+54.0% to +55.2% average Test MSE reduction on NVIDIA T4, L4, and A100 GPUs, 1.0 epoch beating 8.0-epoch e-means, and +19.67% strictly unseen CPU MSE gain." />
+  <meta property="og:image" content="figures/banner.png" />
+  <meta property="og:type" content="article" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+
+  <style>
+    :root {
+      --bg: #fcfcfd;
+      --surface: #ffffff;
+      --surface-subtle: #f6f8fa;
+      --text: #18202c;
+      --text-muted: #526074;
+      --border: #e3e8ef;
+      --accent: #0f4c81;
+      --accent-soft: #eef5fc;
+      --accent-border: #c5dcf2;
+      --code-bg: #0f172a;
+      --code-text: #e2e8f0;
+      --inline-code-bg: #eff3f8;
+      --max-width: 920px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 16.5px;
+      line-height: 1.72;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(252, 252, 253, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 0.86rem;
+    }
+
+    .brand {
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .nav-links a:hover {
+      color: var(--accent);
+    }
+
+    .container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    header.paper-header {
+      margin-bottom: 28px;
+    }
+
+    h1.paper-title {
+      font-family: 'Newsreader', Georgia, serif;
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      line-height: 1.16;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 20px;
+      color: #0d1520;
+    }
+
+    .authors-block {
+      margin-bottom: 18px;
+      font-size: 1.02rem;
+    }
+
+    .authors-list {
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .affiliations {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    .affiliations div {
+      margin-bottom: 2px;
+    }
+
+    .resources-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 20px 0 26px;
+    }
+
+    .pill-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--accent-border);
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.88rem;
+      font-weight: 600;
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+
+    .pill-link:hover {
+      background: #e1eefb;
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
+
+    .pill-link.secondary {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .pill-link.secondary:hover {
+      background: var(--surface-subtle);
+    }
+
+    figure {
+      margin: 28px 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
+    }
+
+    figure.banner-fig {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+
+    figure.banner-fig img {
+      border-radius: 0;
+    }
+
+    figcaption {
+      margin-top: 10px;
+      padding: 0 6px 4px;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .toc-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 24px 0 32px;
+      font-size: 0.92rem;
+    }
+
+    .toc-title {
+      font-weight: 700;
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 6px 18px;
+    }
+
+    hr.section-sep {
+      border: 0;
+      border-top: 1px solid var(--border);
+      margin: 38px 0;
+    }
+
+    h2 {
+      font-family: 'Newsreader', Georgia, serif;
+      font-size: 1.65rem;
+      line-height: 1.25;
+      margin: 0 0 16px;
+      color: #0d1520;
+      scroll-margin-top: 64px;
+    }
+
+    h3 {
+      font-size: 1.18rem;
+      line-height: 1.35;
+      margin: 28px 0 12px;
+      color: #162032;
+      scroll-margin-top: 64px;
+    }
+
+    p {
+      margin: 0 0 15px;
+    }
+
+    ul, ol {
+      margin: 0 0 18px;
+      padding-left: 24px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.87em;
+      background: var(--inline-code-bg);
+      color: #172554;
+      padding: 2px 5px;
+      border-radius: 5px;
+    }
+
+    .code-wrapper {
+      position: relative;
+      margin: 16px 0 22px;
+    }
+
+    pre {
+      margin: 0;
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 16px 18px;
+      border-radius: 10px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      border-radius: 0;
+      font-size: inherit;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(30, 41, 59, 0.88);
+      color: #e2e8f0;
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .copy-btn:hover {
+      background: rgba(51, 65, 85, 0.95);
+    }
+
+    .math-display {
+      overflow-x: auto;
+      margin: 14px 0 18px;
+      padding: 6px 4px;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+      margin: 20px 0 24px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.03);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    thead th {
+      background: var(--surface-subtle);
+      color: #162032;
+      font-weight: 600;
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 10px 13px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: #fafbfd;
+    }
+
+    tbody tr.summary-row {
+      background: #f3f7fb;
+      font-weight: 600;
+    }
+
+    .left {
+      text-align: left;
+    }
+
+    .center {
+      text-align: center;
+    }
+
+    .callout-abstract {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: 10px;
+      padding: 20px 24px 12px;
+      margin-bottom: 24px;
+    }
+
+    footer.page-footer {
+      margin-top: 48px;
+      padding-top: 22px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    @media (max-width: 640px) {
+      .container {
+        padding: 24px 16px 56px;
+      }
+      .topbar-inner {
+        padding: 10px 16px;
+      }
+      .nav-links {
+        display: none;
+      }
+      .callout-abstract {
+        padding: 16px 16px 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar" aria-label="Primary navigation">
+    <div class="topbar-inner">
+      <a class="brand" href="#top">s-means</a>
+      <div class="nav-links">
+        <a href="#abstract">TL;DR</a>
+        <a href="#bottlenecks">1. Bottlenecks</a>
+        <a href="#evoforest">2. EvoForest</a>
+        <a href="#cpu-eval">3. CPU Eval</a>
+        <a href="#triton-kernels">4. Triton Kernels</a>
+        <a href="#gpu-benchmarks">5. Multi-GPU</a>
+        <a href="#usage">6. Usage</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container" id="top">
+    <header class="paper-header">
+      <h1 class="paper-title">s-means: outperforming e-means (which outperforms k-means)</h1>
+
+      <div class="authors-block">
+        <div class="authors-list">
+          <strong>Authors:</strong><br />
+          <strong>Şuayp Talha Kocabay</strong><sup>1,*</sup>,
+          <strong>Kamer Ali Yüksel</strong><sup>2</sup>,
+          <strong>Kerem Yalçın</strong><sup>3</sup>
+        </div>
+        <div class="affiliations">
+          <div><sup>1</sup> Poindexter Labs (<a href="mailto:stk@poindexterlabs.ai"><code>stk@poindexterlabs.ai</code></a>) — <sup>*</sup>Corresponding author</div>
+          <div><sup>2</sup> Feedzai (<a href="mailto:kamer.yuksel@feedzai.com"><code>kamer.yuksel@feedzai.com</code></a>)</div>
+          <div><sup>3</sup> Independent Researcher (<a href="mailto:54keremyalcin@gmail.com"><code>54keremyalcin@gmail.com</code></a>)</div>
+        </div>
+      </div>
+
+      <div class="resources-row">
+        <a class="pill-link" href="https://github.com/suayptalha/s-means" target="_blank" rel="noopener">
+          Open-Source Package (PyTorch, Triton &amp; scikit-learn): github.com/suayptalha/s-means
+        </a>
+        <a class="pill-link secondary" href="https://arxiv.org/abs/2604.19761" target="_blank" rel="noopener">
+          Algorithm Discovery Framework (EvoForest): arxiv.org/abs/2604.19761
+        </a>
+        <a class="pill-link secondary" href="s_means_blog.md">
+          Markdown Source
+        </a>
+      </div>
+
+      <figure class="banner-fig">
+        <img src="figures/banner.png" alt="s-means banner" />
+      </figure>
+    </header>
+
+    <div class="toc-box">
+      <div class="toc-title">Contents</div>
+      <div class="toc-grid">
+        <a href="#abstract">Abstract / TL;DR</a>
+        <a href="#bottlenecks">1. Where Single-Epoch Clustering Leaves Quality on the Table</a>
+        <a href="#evoforest">2. Discovering s-means via EvoForest (Without Extra Passes)</a>
+        <a href="#cpu-eval">3. Strictly Unseen CPU Generalization &amp; Leave-One-Out Ablation</a>
+        <a href="#triton-kernels">4. Engineering s-means for Modern GPUs: Custom Fused Triton Kernels</a>
+        <a href="#gpu-benchmarks">5. Multi-GPU Benchmarks: T4 (SM75), L4 (SM89), and A100 (SM80)</a>
+        <a href="#usage">6. Using s-means Today</a>
+        <a href="#citation">Citation</a>
+      </div>
+    </div>
+
+    <section id="abstract" class="callout-abstract">
+      <h2>Abstract / TL;DR</h2>
+
+      <p>
+        Meta AI recently introduced <strong><code>e-means</code></strong>, a modern mini-batch clustering formulation driven by empirical batch-size/learning-rate scaling laws, single-epoch final pass averaging, and low-overhead dead-cluster revival, achieving substantial speedups over Lloyd $k$-means. Yet even well-tuned single- and few-epoch streaming clustering still leaves large quantization gains on the table—particularly on skewed (Zipfian), high-dimensional, anisotropic, unscaled, or fractional-epoch workloads—because of random initialization, count-only cluster splits, coordinate-wise multiplicative perturbations, and unregularized final-pass estimates.
+      </p>
+
+      <p>
+        Using <strong>EvoForest</strong> (<a href="https://arxiv.org/abs/2604.19761" target="_blank" rel="noopener">arXiv:2604.19761</a>), we systematically evolved <code>e-means</code> on CPU across 9 island-evolution rounds without adding extra data passes, producing <strong><code>s-means</code></strong> (<em>Scale- &amp; Distortion-Aware Clustering</em>). We then engineered end-to-end <strong>custom fused Triton CUDA kernels</strong>, <strong>native PyTorch GPU fallbacks</strong>, <strong>cache-tiled CPU kernels</strong>, and a full <strong><code>scikit-learn</code>-compatible estimator</strong> released at <a href="https://github.com/suayptalha/s-means" target="_blank" rel="noopener"><code>suayptalha/s-means</code></a>.
+      </p>
+
+      <p>
+        Across <strong>12 strictly unseen CPU datasets</strong> and <strong>3 NVIDIA GPU architectures (T4 <code>SM75</code>, L4 <code>SM89</code>, A100 <code>SM80</code>)</strong>, <strong><code>s-means</code></strong> delivers:
+      </p>
+
+      <ul>
+        <li>
+          <strong>+54.0% to +55.2% average Test MSE reduction on GPUs</strong> across 9 diverse benchmarks (<code>+54.03%</code> on T4, <code>+54.35%</code> on L4, <code>+55.21%</code> on A100 SXM4 40GB)—reaching up to <strong><code>+78.7%</code></strong> improvement on structured GMMs and <strong><code>+74.9%</code></strong> at 1M points × 2,048 clusters.
+        </li>
+        <li>
+          <strong>1.0 epoch beats 8.0-epoch <code>e-means</code>:</strong> On <code>200k × 128D, k=1024</code>, <code>s-means</code> at <strong>$T = 1.0$ epoch</strong> achieves <strong><code>32.2</code> Test MSE in <code>33 ms</code></strong> on A100 (and <code>30.8</code> MSE in <code>36 ms</code> on L4), more than <strong>2× lower quantization error</strong> than <code>e-means</code> at <strong>$T = 8.0$ epochs</strong> (<code>65.7</code> MSE in <code>36 ms</code> on A100; <code>64.4</code> MSE in <code>40 ms</code> on L4).
+        </li>
+        <li>
+          <strong>Lower GPU peak workspace VRAM:</strong> <strong><code>0.875×</code> median peak VRAM delta</strong> vs <code>e-means</code> BF16 Triton on L4/A100 (<code>71.2 MB</code> vs <code>84.6 MB</code> at 1M points / <code>k=2048</code>, and <strong>4.35× lower</strong> than PyTorch Native <code>309.8 MB</code>), and <strong><code>0.360×</code> median peak VRAM</strong> (<code>0.222×</code> at <code>1M × k=2048</code>) on T4.
+        </li>
+        <li>
+          <strong>Superior Turing (<code>SM75</code>) hardware coverage:</strong> Upstream <code>e-means</code> <code>auto</code>/Triton paths fail on NVIDIA T4 (<code>SM75</code>) due to BF16 casting, <code>.bf16</code> PTX inline assembly, and <code>&gt;64 KB</code> shared-memory tiles. <code>s-means</code> runs cleanly across all 9 T4 workloads, beating Meta's native T4 baseline by <strong><code>+53.81%–+54.03%</code> MSE</strong>, <strong><code>0.881×</code> faster wall-clock latency</strong>, and <strong><code>0.360×</code> VRAM</strong>.
+        </li>
+        <li>
+          <strong>Strong CPU generalization with parity speed and memory:</strong> Across 12 strictly unseen CPU datasets (5 seeds each), <code>s-means</code> achieves <strong><code>+19.67%</code> mean Test MSE gain</strong> (<code>+21.30%</code> Train, <code>0</code> regressions) at <strong><code>1.051×</code> median CPU time vs <code>e-means</code></strong> (<strong><code>2.2×–31.0×</code> faster than <code>sklearn.cluster.MiniBatchKMeans</code></strong>) with <strong><code>0.0 MB</code> extra OS RSS overhead</strong>.
+        </li>
+      </ul>
+    </section>
+
+    <hr class="section-sep" />
+
+    <section id="bottlenecks">
+      <h2>1. Where Single-Epoch Clustering Leaves Quality on the Table</h2>
+
+      <p>
+        Traditional Lloyd $k$-means requires full passes over all $n \times k$ distances per iteration, making large-scale or latency-sensitive quantization expensive. Meta's <a href="https://github.com/facebookresearch/faiss/tree/main/contrib/e_means" target="_blank" rel="noopener"><code>e-means</code></a> (<code>arXiv:2611.09501</code>) addresses this via two regimes (<code>quality</code> for $d \le 16$, <code>throughput</code> for $d &gt; 16$) predicting near-optimal batch size $B$ and Robbins–Monro step rate $\alpha_0$, combined with:
+      </p>
+
+      <ol>
+        <li>Random row sampling for initial centroids,</li>
+        <li>Periodic dead-cluster revival (every 5 steps when usage drops below <code>0.1 * mean(usage)</code>, disabled for $d &lt; 16$),</li>
+        <li>Multiplicative jitter perturbations <code>c * (1 ± 1e-4 * r)</code> splitting high-usage donors, and</li>
+        <li>Uniform averaging of the final pass (<code>pass_sums / pass_counts</code>).</li>
+      </ol>
+
+      <p>
+        Through controlled ablation and profiling across synthetic and real-world distributions, we identified <strong>four structural bottlenecks</strong> in this design:
+      </p>
+
+      <ol>
+        <li>
+          <strong>Random-row seeding wastes scarce early steps.</strong> Under $T \in [1, 3]$ epochs, starting with uniform random rows forces the optimizer to spend most of its budget migrating redundant centroids out of over-represented modes, leaving rare clusters unrepresented when cosine decay shrinks $\alpha_t$.
+        </li>
+        <li>
+          <strong>Count-only revival splits dense, low-error clusters while ignoring high-distortion modes.</strong> A well-fitted dense cluster can accumulate high <code>usage</code> while contributing little MSE. Conversely, a sprawling, multi-modal, or under-split cluster with massive quantization error may never be split first.
+        </li>
+        <li>
+          <strong>Multiplicative perturbations break shift and scale invariance.</strong> Perturbing <code>c * (1 ± eps)</code> collapses near the origin ($\mathbf{c} \approx \mathbf{0}$), explodes when features have large global offsets (e.g., $\mathbf{x} + 50$), and expands isotropically even when feature variances span orders of magnitude.
+        </li>
+        <li>
+          <strong>Unweighted final-pass means under-regularize low-count clusters.</strong> Early batches in the final epoch use coarser centroids than late batches, yet receive equal weight; meanwhile, clusters hit by only a handful of samples in the final pass discard the smoothed EMA trajectory.
+        </li>
+      </ol>
+    </section>
+
+    <hr class="section-sep" />
+
+    <section id="evoforest">
+      <h2>2. Discovering <code>s-means</code> via EvoForest (Without Extra Passes)</h2>
+
+      <p>
+        Rather than hand-tuning isolated heuristics, we formulated mini-batch clustering as a modular DAG over 7 functional nodes (<code>assign_cfg</code>, <code>recipe_fn</code>, <code>init_fn</code>, <code>schedule_fn</code>, <code>update_fn</code>, <code>revive_fn</code>, <code>finalize_fn</code>) and ran <strong>EvoForest</strong> (<a href="https://arxiv.org/abs/2604.19761" target="_blank" rel="noopener">arXiv:2604.19761</a>) on CPU with <strong>4 islands × 9 rounds (36 island steps)</strong> against canonical <code>e-means</code>.
+      </p>
+
+      <h3>Fitness Design &amp; Leak Prevention</h3>
+
+      <p>
+        Each EvoForest candidate was scored on an <strong>8-dataset CPU training suite</strong> spanning distinct failure modes (<code>gauss_stretched_d64</code>, <code>gmm_isotropic_d128</code>, <code>zipf_imbalanced_d64</code>, <code>lowd_multiscale_d2</code>, <code>hypersphere_d48</code>, <code>shifted_corr_d32</code> with $+50$ mean shift at $T=2$, <code>cal_housing_raw</code>, and <code>cal_housing_std</code>):
+      </p>
+
+      <ul>
+        <li><strong>No extra epochs:</strong> Every candidate receives the exact benchmark epoch budget <code>nepochs</code>.</li>
+        <li><strong>Composite quality signal:</strong> Relative MSE reduction (<code>65%</code> held-out test MSE + <code>35%</code> train MSE) guarded by worst-case regression penalties.</li>
+        <li><strong>Strict hardware parity constraints:</strong> Runtime penalty whenever median CPU wall-clock exceeds <code>1.05× e-means</code>, and analytical scratch-memory penalty if peak working memory exceeds <code>1.02× e-means</code>.</li>
+      </ul>
+
+      <h3>Trajectory of Key Algorithmic Breakthroughs</h3>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="left">Version / Step</th>
+              <th class="left">EvoForest Milestone</th>
+              <th class="center">Composite CPU Score</th>
+              <th class="left">Core Architectural Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="left"><strong><code>v0</code></strong></td>
+              <td class="left"><code>e-means</code> Baseline</td>
+              <td class="center"><code>0.064</code></td>
+              <td class="left">Canonical Meta <code>e-means</code> starting DAG</td>
+            </tr>
+            <tr>
+              <td class="left"><strong><code>v1</code></strong> (Step 3)</td>
+              <td class="left"><strong>RMS Distortion Revival + $d \ge 1$</strong></td>
+              <td class="center"><code>10.76</code></td>
+              <td class="left">Replaced count-only splits with per-cluster <code>sse_ema</code> tracking and shift-invariant RMS split radius across all dimensions (<code>revive_min_d = 1</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><strong><code>v3</code></strong> (Step 6)</td>
+              <td class="left"><strong>Subsampled $D^{1.5}$ Seeding</strong></td>
+              <td class="center"><code>16.09</code></td>
+              <td class="left">Replaced random-row init with batched distance-weighted seeding ($p=1.5$) over a small $O(\max(4k, 512))$ coreset</td>
+            </tr>
+            <tr>
+              <td class="left"><strong><code>v4</code></strong> (Step 10)</td>
+              <td class="left"><strong>Anisotropic $O(Kd)$ <code>feat_scale</code></strong></td>
+              <td class="center"><code>18.73</code></td>
+              <td class="left">Added online inter-cluster per-feature variance tracking inside <code>update_fn</code> to normalize Rademacher split vectors along true data spread</td>
+            </tr>
+            <tr>
+              <td class="left"><strong><code>v5</code></strong> (Step 15)</td>
+              <td class="left"><strong>Cache Tiling (<code>512×256</code>) + 4-Round Init</strong></td>
+              <td class="center"><code>20.47</code></td>
+              <td class="left">Cut L3 cache misses via <code>512×256</code> assignment tiles (<code>280×</code> smaller scratch tile than <code>8192×4096</code>) and batched 4-round $D^{1.5}$ init</td>
+            </tr>
+            <tr>
+              <td class="left"><strong><code>v6</code></strong> (Step 23)</td>
+              <td class="left"><strong>Progressive Final-Pass Weights</strong></td>
+              <td class="center"><code>20.69</code></td>
+              <td class="left">Linearly ramped final-pass accumulation weights <code>(1 - 0.35) + 0.70 * pfrac</code> to favor cleaner late-epoch centroids</td>
+            </tr>
+            <tr class="summary-row">
+              <td class="left"><strong><code>v8</code> (<code>s-means</code>)</strong></td>
+              <td class="left"><strong>Empirical-Bayes Finalize (Converged)</strong></td>
+              <td class="center"><strong><code>20.80</code></strong></td>
+              <td class="left">Added count-adaptive shrinkage ($\tau = 0.20$) in <code>finalize_fn</code>; Round 8 rejected all 4/4 candidates (clean convergence)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure>
+        <img src="figures/fig5_ablation_and_evolution.png" alt="EvoForest Trajectory and Leave-One-Out Ablation" />
+        <figcaption>EvoForest Trajectory and Leave-One-Out Ablation</figcaption>
+      </figure>
+
+      <h3>The Resulting <code>s-means</code> Algorithm</h3>
+
+      <p>
+        Every step of <strong><code>s-means</code></strong> requires <strong>only $O(Kd)$ extra state</strong> (<code>sse_ema</code>, <code>feat_scale</code>, <code>usage</code>, and final-pass accumulators) and <strong>zero extra passes over the dataset</strong>:
+      </p>
+
+      <ol>
+        <li>
+          <strong>Multi-Round Subsampled $D^{1.5}$ Seeding:</strong> Sample a small coreset of size $m = \min(n, \max(4k, 512))$ and select centroids in 4 batched rounds with multinomial probabilities proportional to $d_{\min}(x)^{1.5} + 10^{-12}$, achieving fast geometric coverage in $O(mk)$ work.
+        </li>
+        <li>
+          <strong>Dimension-Aware Scaling Laws + Power-Cosine Decay:</strong> Preserve the <code>quality</code> ($d \le 16$) and <code>throughput</code> ($d &gt; 16$) batch scaling laws while smoothly decaying $\alpha_t$ via:
+          <div class="math-display">$$\alpha_t = \alpha_0 \left(0.06 + 0.94 \left[\frac{1 + \cos(\pi \cdot \text{step} / T_{\text{steps}})}{2}\right]^{0.92}\right)$$</div>
+        </li>
+        <li>
+          <strong>Distortion-Weighted Anisotropic Revival (All $d \ge 1$):</strong> From <code>batch_sums</code> and <code>batch_counts</code> ($K \times D$), maintain online inter-cluster per-feature variance <code>feat_scale</code> ($\beta = 0.85$) and per-cluster <code>sse_ema</code> ($\gamma = 0.85$). Every 5 steps (up to 85% of training steps), unused clusters (<code>usage &lt; 0.1 * mean(usage)</code>) split active donors selected via Gumbel keys on $\text{sse\_ema} \cdot \text{usage}^{0.35}$:
+          <div class="math-display">$$\Delta_s = 0.55 \sqrt{\frac{\text{sse\_ema}_s}{\max(\text{usage}_s, 10^{-6}) \cdot d}} \; \mathbf{r} \odot \hat{\sigma}_{\text{feat}}, \qquad \mathbf{r} \sim \text{Rademacher}(\{-1, +1\}^d)$$</div>
+          where $\hat{\sigma}_{\text{feat}} = \sqrt{\text{feat\_scale}} \cdot \sqrt{d} / \|\sqrt{\text{feat\_scale}}\|_2$. Both parent and revived centroids take $\mathbf{c}_s \mp \Delta_s$ and split <code>usage</code> and <code>sse_ema</code> equally.
+        </li>
+        <li>
+          <strong>Progressive Final-Pass Refinement + Empirical-Bayes Finalization:</strong> During the final epoch pass, weight mini-batch contributions linearly by progress (<code>0.65 -&gt; 1.35</code>), then shrink low-count cluster pass means $\bar{\mu}_k$ back toward the smoothed EMA centroid $\mathbf{c}_k$:
+          <div class="math-display">$$\mathbf{c}_k^{\text{final}} = \frac{n_k^{\text{pass}}}{n_k^{\text{pass}} + \tau}\,\bar{\mu}_k + \frac{\tau}{n_k^{\text{pass}} + \tau}\,\mathbf{c}_k, \qquad \tau = 0.20$$</div>
+        </li>
+      </ol>
+    </section>
+
+    <hr class="section-sep" />
+
+    <section id="cpu-eval">
+      <h2>3. Strictly Unseen CPU Generalization &amp; Leave-One-Out Ablation</h2>
+
+      <p>
+        To confirm that <code>s-means</code> did not overfit the 8 EvoForest training datasets, we evaluated the frozen <code>s-means</code> (<code>v8</code>) algorithm across <strong>12 strictly unseen CPU datasets × 5 random seeds</strong>, comparing against both <strong>Meta <code>e-means</code></strong> and <strong><code>scikit-learn</code> <code>MiniBatchKMeans</code></strong>:
+      </p>
+
+      <figure>
+        <img src="figures/fig6_cpu_unseen_summary.png" alt="CPU Unseen Generalization and Wall-Clock Speed" />
+        <figcaption>CPU Unseen Generalization and Wall-Clock Speed</figcaption>
+      </figure>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="left">Unseen CPU Dataset</th>
+              <th class="left">Config (<code>n, d, k, T</code>)</th>
+              <th class="center">Test MSE Gain vs <code>e-means</code></th>
+              <th class="center">Train MSE Gain vs <code>e-means</code></th>
+              <th class="center"><code>s-means</code> CPU Time Ratio</th>
+              <th class="center"><code>sklearn</code> Time vs <code>e-means</code></th>
+              <th class="center">Analytical Mem Ratio</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="left"><code>covtype_raw</code></td>
+              <td class="left"><code>80k, 54d, k=256, T=3</code></td>
+              <td class="center"><strong><code>+3.31%</code></strong></td>
+              <td class="center"><code>+3.79%</code></td>
+              <td class="center"><strong><code>0.961×</code></strong></td>
+              <td class="center"><code>15.9×</code> slower</td>
+              <td class="center"><strong><code>0.355×</code></strong></td>
+            </tr>
+            <tr>
+              <td class="left"><code>covtype_std</code></td>
+              <td class="left"><code>80k, 54d, k=256, T=3</code></td>
+              <td class="center"><code>+0.00%</code></td>
+              <td class="center"><strong><code>+11.93%</code></strong></td>
+              <td class="center"><code>1.164×</code></td>
+              <td class="center"><code>15.5×</code> slower</td>
+              <td class="center"><strong><code>0.355×</code></strong></td>
+            </tr>
+            <tr>
+              <td class="left"><code>digits_raw</code></td>
+              <td class="left"><code>1.2k, 64d, k=64, T=5</code></td>
+              <td class="center"><code>+0.03%</code></td>
+              <td class="center"><code>+0.16%</code></td>
+              <td class="center"><code>1.047×</code></td>
+              <td class="center"><code>2.2×</code> slower</td>
+              <td class="center"><code>1.009×</code></td>
+            </tr>
+            <tr>
+              <td class="left"><code>digits_std</code></td>
+              <td class="left"><code>1.2k, 64d, k=64, T=5</code></td>
+              <td class="center"><code>+0.50%</code></td>
+              <td class="center"><code>+1.77%</code></td>
+              <td class="center"><code>1.005×</code></td>
+              <td class="center"><code>2.4×</code> slower</td>
+              <td class="center"><code>1.009×</code></td>
+            </tr>
+            <tr>
+              <td class="left"><code>uniform_cube_d16</code></td>
+              <td class="left"><code>15k, 16d, k=128, T=3</code></td>
+              <td class="center"><code>+0.27%</code></td>
+              <td class="center"><code>-0.01%</code></td>
+              <td class="center"><strong><code>0.841×</code></strong></td>
+              <td class="center"><code>19.7×</code> slower</td>
+              <td class="center"><code>1.006×</code></td>
+            </tr>
+            <tr>
+              <td class="left"><code>highdim_zipf_d256</code></td>
+              <td class="left"><code>15k, 256d, k=256, T=3</code></td>
+              <td class="center"><strong><code>+37.62%</code></strong></td>
+              <td class="center"><strong><code>+41.76%</code></strong></td>
+              <td class="center"><code>1.105×</code></td>
+              <td class="center"><code>14.3×</code> slower</td>
+              <td class="center"><strong><code>0.839×</code></strong></td>
+            </tr>
+            <tr>
+              <td class="left"><code>gmm_iso_d64_T2</code></td>
+              <td class="left"><code>15k, 64d, k=256, T=2</code></td>
+              <td class="center"><strong><code>+62.69%</code></strong></td>
+              <td class="center"><strong><code>+63.55%</code></strong></td>
+              <td class="center"><code>1.022×</code></td>
+              <td class="center"><code>17.5×</code> slower</td>
+              <td class="center"><code>1.004×</code></td>
+            </tr>
+            <tr>
+              <td class="left"><code>stretched_inv2_d128</code></td>
+              <td class="left"><code>12k, 128d, k=128, T=3</code></td>
+              <td class="center"><code>+0.21%</code></td>
+              <td class="center"><code>+0.02%</code></td>
+              <td class="center"><strong><code>0.966×</code></strong></td>
+              <td class="center"><code>15.9×</code> slower</td>
+              <td class="center"><code>1.005×</code></td>
+            </tr>
+            <tr>
+              <td class="left"><code>manifold_rings_d32</code></td>
+              <td class="left"><code>25k, 32d, k=128, T=3</code></td>
+              <td class="center"><code>+2.25%</code></td>
+              <td class="center"><code>+2.51%</code></td>
+              <td class="center"><code>1.055×</code></td>
+              <td class="center"><code>14.9×</code> slower</td>
+              <td class="center"><strong><code>0.692×</code></strong></td>
+            </tr>
+            <tr>
+              <td class="left"><code>large_d128_k512</code></td>
+              <td class="left"><code>50k, 128d, k=512, T=3</code></td>
+              <td class="center"><strong><code>+57.20%</code></strong></td>
+              <td class="center"><strong><code>+57.44%</code></strong></td>
+              <td class="center"><code>1.148×</code></td>
+              <td class="center"><strong><code>31.0×</code> slower</strong></td>
+              <td class="center"><strong><code>0.439×</code></strong></td>
+            </tr>
+            <tr>
+              <td class="left"><code>frac_budget_T1p5</code></td>
+              <td class="left"><code>20k, 64d, k=192, T=1.5</code></td>
+              <td class="center"><strong><code>+54.21%</code></strong></td>
+              <td class="center"><strong><code>+54.31%</code></strong></td>
+              <td class="center"><code>1.077×</code></td>
+              <td class="center"><code>17.9×</code> slower</td>
+              <td class="center"><code>1.005×</code></td>
+            </tr>
+            <tr>
+              <td class="left"><code>multiscale_4d_T8</code></td>
+              <td class="left"><code>15k, 4d, k=128, T=8</code></td>
+              <td class="center"><strong><code>+17.76%</code></strong></td>
+              <td class="center"><strong><code>+18.33%</code></strong></td>
+              <td class="center"><code>1.120×</code></td>
+              <td class="center"><code>22.4×</code> slower</td>
+              <td class="center"><code>1.010×</code></td>
+            </tr>
+            <tr class="summary-row">
+              <td class="left"><strong>Aggregate (12 Datasets)</strong></td>
+              <td class="left"><strong>5-Seed Mean</strong></td>
+              <td class="center"><strong><code>+19.67%</code></strong></td>
+              <td class="center"><strong><code>+21.30%</code></strong></td>
+              <td class="center"><strong>Med <code>1.051×</code></strong></td>
+              <td class="center"><strong><code>2.2×–31.0×</code></strong></td>
+              <td class="center"><strong>Max <code>1.010×</code></strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Real OS process RSS telemetry (<code>resource.getrusage(RUSAGE_SELF).ru_maxrss</code>) in isolated subprocesses confirms zero memory overhead (<code>955.09 MB</code> before and after on both <code>50k × 128D, k=512</code> and <code>100k × 64D, k=256, T=5</code>: <strong><code>0.0 MB</code> delta</strong>, vs <code>8192 × 4096</code> coarse tiles in <code>e-means</code>).
+      </p>
+
+      <h3>What Actually Matters? (Leave-One-Out Component Ablation)</h3>
+
+      <p>
+        In the right panel of <strong>Figure 5</strong>, disabling <strong>Distortion &amp; Anisotropic Revival</strong> collapses the mean unseen Test MSE gain from <strong><code>+19.86%</code> to <code>+7.09%</code></strong> (<code>-12.77</code> points). Removing <strong>Subsampled $D^{1.5}$ Init</strong> costs <code>-2.64</code> points, disabling <strong>Low-D Revival (<code>d &lt; 16</code>)</strong> costs <code>-1.19</code> points, and removing <strong>Cache Tiling (<code>512×256</code>)</strong> matches accuracy (<code>+19.86%</code>) while letting median CPU runtime stay fast vs unblocked alternatives.
+      </p>
+    </section>
+
+    <hr class="section-sep" />
+
+    <section id="triton-kernels">
+      <h2>4. Engineering <code>s-means</code> for Modern GPUs: Custom Fused Triton Kernels</h2>
+
+      <p>
+        Porting <code>s-means</code> naively to PyTorch eager GPU ops is not enough—at 1M points, materializing <code>[B, K]</code> distance matrices or issuing host-device synchronizations on every step destroys bandwidth and VRAM efficiency. In <a href="https://github.com/suayptalha/s-means/blob/main/smeans/_triton_kernels.py" target="_blank" rel="noopener"><code>smeans/_triton_kernels.py</code></a>, we implemented five custom Triton kernels alongside an architecture-aware GPU runner:
+      </p>
+
+      <ol>
+        <li>
+          <strong><code>smeans_assign_kernel</code>:</strong> Fused tiled L2 squared-distance + <code>argmin</code> computing $\|x - c\|^2 = \|x\|^2 + \|c\|^2 - 2 x^\top c$ entirely in registers/SRAM with column-major centroid layout (<code>.t().contiguous().t()</code>) so <code>tl.trans(c_tile)</code> coalesces cleanly for <code>tl.dot</code> Tensor Cores. It never materializes an <code>[B, K]</code> distance tensor in HBM and adapts <code>num_stages</code> (<code>1</code> on <code>SM75</code> with 64KB smem limit, <code>2</code> on <code>SM80+</code>) and Tensor-Core padding automatically.
+        </li>
+        <li>
+          <strong>Chunked Gather + Conflict-Free CUB Reduction:</strong> Logical batches are gathered and assigned in capped streaming chunks (<code>8192</code> for Native, <code>65536</code> for Triton), feeding CUB-backed <code>index_add_</code> / <code>scatter_add_</code> (<code>sums</code>, <code>counts</code>, <code>batch_sse</code>) instead of raw Triton global atomics that stall on Zipfian hot clusters.
+        </li>
+        <li>
+          <strong><code>smeans_feat_scale_kernel</code>:</strong> Two-pass $O(KD)$ reduction over cluster <code>sums</code> and <code>counts</code> updating inter-cluster feature variance without ever touching raw $N \times D$ points.
+        </li>
+        <li>
+          <strong><code>smeans_ema_sse_pass_kernel</code>:</strong> Fuses centroid EMA updates, usage decay, <code>sse_ema</code> tracking, and final-pass weighted accumulation into a single kernel launch per step.
+        </li>
+        <li>
+          <strong><code>smeans_revive_split_kernel</code> &amp; <code>smeans_eb_finalize_kernel</code>:</strong> Generates Rademacher perturbations in-register via Triton Philox RNG (<code>tl.rand(seed, pid * D + col)</code>) with zero temporary <code>[n_sp, d]</code> tensor allocations, and applies Empirical-Bayes shrinkage in-place on cluster completion.
+        </li>
+      </ol>
+    </section>
+
+    <hr class="section-sep" />
+
+    <section id="gpu-benchmarks">
+      <h2>5. Multi-GPU Benchmarks: T4 (<code>SM75</code>), L4 (<code>SM89</code>), and A100 (<code>SM80</code>)</h2>
+
+      <p>
+        We benchmarked <code>s-means</code> against Meta's <code>e-means</code> (all backends: <code>auto</code>, <code>native</code>, <code>triton</code>) across <strong>9 workloads × 3 seeds</strong> with untimed exact-shape + skewed-cluster kernel warmups and <code>torch.cuda.max_memory_allocated()</code> workspace delta tracking on Google Colab GPUs: <strong>Tesla T4 (14.56 GB, <code>SM75</code>)</strong>, <strong>NVIDIA L4 (22.03 GB, <code>SM89</code>)</strong>, and <strong>NVIDIA A100-SXM4 (39.49 GB, <code>SM80</code>)</strong> (<code>PyTorch 2.14.1+cu130</code>, <code>Triton 3.8.0</code>).
+      </p>
+
+      <h3>Cross-Hardware Quantization Quality</h3>
+
+      <figure>
+        <img src="figures/fig1_cross_hardware_accuracy.png" alt="Cross-hardware Test MSE reduction across T4, L4, A100" />
+        <figcaption>Cross-hardware Test MSE reduction across T4, L4, A100</figcaption>
+      </figure>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="left">Workload</th>
+              <th class="left">Specs (<code>n, d, k, T</code>)</th>
+              <th class="center">T4 <code>s-means</code> MSE Gain (vs Native)</th>
+              <th class="center">L4 <code>s-means</code> MSE Gain (vs Triton)</th>
+              <th class="center">A100 <code>s-means</code> MSE Gain (vs Triton)</th>
+              <th class="center">A100 Peak VRAM Ratio</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="left"><code>gmm_100k_d128_k512</code></td>
+              <td class="left"><code>100k, 128d, k=512, T=3</code></td>
+              <td class="center"><strong><code>+78.71%</code></strong></td>
+              <td class="center"><strong><code>+78.47%</code></strong></td>
+              <td class="center"><strong><code>+77.48%</code></strong></td>
+              <td class="center"><strong><code>0.872×</code></strong> (<code>8.1</code> vs <code>9.3 MB</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><code>zipf_200k_d128_k1024</code></td>
+              <td class="left"><code>200k, 128d, k=1024, T=3</code></td>
+              <td class="center"><strong><code>+45.34%</code></strong> (<code>+45.97%</code> nat)</td>
+              <td class="center"><strong><code>+49.38%</code></strong></td>
+              <td class="center"><strong><code>+47.82%</code></strong></td>
+              <td class="center"><strong><code>0.987×</code></strong> (<code>18.8</code> vs <code>19.0 MB</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><code>large_500k_d128_k1024</code></td>
+              <td class="left"><code>500k, 128d, k=1024, T=3</code></td>
+              <td class="center"><strong><code>+75.02%</code></strong> (<code>+74.36%</code> nat)</td>
+              <td class="center"><strong><code>+74.38%</code></strong></td>
+              <td class="center"><strong><code>+75.94%</code></strong></td>
+              <td class="center"><strong><code>0.846×</code></strong> (<code>35.1</code> vs <code>41.5 MB</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><code>highdim_250k_d256_k512</code></td>
+              <td class="left"><code>250k, 256d, k=512, T=3</code></td>
+              <td class="center"><strong><code>+74.04%</code></strong> (<code>+73.66%</code> nat)</td>
+              <td class="center"><strong><code>+73.36%</code></strong></td>
+              <td class="center"><strong><code>+74.16%</code></strong></td>
+              <td class="center"><code>1.079×</code> (<code>27.8</code> vs <code>25.8 MB</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><code>aniso_200k_d64_k512</code></td>
+              <td class="left"><code>200k, 64d, k=512, T=3</code></td>
+              <td class="center"><strong><code>+49.01%</code></strong> (<code>+49.43%</code> nat)</td>
+              <td class="center"><strong><code>+46.16%</code></strong></td>
+              <td class="center"><strong><code>+52.51%</code></strong></td>
+              <td class="center"><strong><code>0.879×</code></strong> (<code>13.5</code> vs <code>15.3 MB</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><code>covtype_real_581k</code></td>
+              <td class="left"><code>465k, 54d, k=512, T=3</code></td>
+              <td class="center"><strong><code>+1.88%</code></strong> (<code>+1.90%</code> nat)</td>
+              <td class="center"><strong><code>+2.02%</code></strong></td>
+              <td class="center"><strong><code>+3.14%</code></strong></td>
+              <td class="center"><strong><code>0.765×</code></strong> (<code>27.8</code> vs <code>36.3 MB</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><code>lowd_200k_d8_k512</code></td>
+              <td class="left"><code>200k, 8d, k=512, T=3</code></td>
+              <td class="center"><strong><code>+20.68%</code></strong></td>
+              <td class="center"><strong><code>+23.75%</code></strong></td>
+              <td class="center"><strong><code>+23.36%</code></strong></td>
+              <td class="center"><strong><code>0.875×</code></strong> (<code>10.9</code> vs <code>12.4 MB</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><code>frac_T1p5_300k_d64_k512</code></td>
+              <td class="left"><code>300k, 64d, k=512, T=1.5</code></td>
+              <td class="center"><strong><code>+67.06%</code></strong></td>
+              <td class="center"><strong><code>+67.94%</code></strong></td>
+              <td class="center"><strong><code>+67.50%</code></strong></td>
+              <td class="center"><strong><code>0.882×</code></strong> (<code>18.6</code> vs <code>21.1 MB</code>)</td>
+            </tr>
+            <tr>
+              <td class="left"><code>mega_1m_d128_k2048</code></td>
+              <td class="left"><code>1M, 128d, k=2048, T=3</code></td>
+              <td class="center"><strong><code>+74.53%</code></strong> (<code>+74.58%</code> nat)</td>
+              <td class="center"><strong><code>+73.70%</code></strong></td>
+              <td class="center"><strong><code>+74.94%</code></strong></td>
+              <td class="center"><strong><code>0.842×</code></strong> (<code>71.2</code> vs <code>84.6 MB</code>)</td>
+            </tr>
+            <tr class="summary-row">
+              <td class="left"><strong>Mean Across All 9</strong></td>
+              <td class="left">—</td>
+              <td class="center"><strong><code>+54.03%</code></strong></td>
+              <td class="center"><strong><code>+54.35%</code></strong></td>
+              <td class="center"><strong><code>+55.21%</code></strong></td>
+              <td class="center"><strong>Med <code>0.875×</code></strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Epoch Convergence &amp; Pareto Dominance (<code>T = 1.0</code> vs <code>T = 8.0</code>)</h3>
+
+      <figure>
+        <img src="figures/fig2_pareto_epochs_and_time.png" alt="Epoch convergence and Pareto frontier on L4 and A100" />
+        <figcaption>Epoch convergence and Pareto frontier on L4 and A100</figcaption>
+      </figure>
+
+      <p>
+        Across epoch budgets $T \in \{1.0, 1.5, 2.0, 3.0, 5.0, 8.0\}$ on <code>200k × 128D, k=1024</code>:
+      </p>
+
+      <ul>
+        <li>
+          <strong>On A100:</strong> <code>s-means</code> reaches <strong><code>32.21</code> MSE in <code>33 ms</code> at $T=1.0$</strong> (<code>21.70</code> at $T=1.5$, <code>19.30</code> at $T=3.0$, <code>17.25</code> at $T=8.0$), whereas <code>e-means</code> scores <strong><code>92.44</code> at $T=1.0$ (<code>15 ms</code>)</strong> and still <strong><code>65.68</code> MSE at $T=8.0$ (<code>36 ms</code>)</strong>, and GPU Lloyd plateaus at <code>120.64</code>.
+        </li>
+        <li>
+          <strong>On L4:</strong> <code>s-means</code> reaches <strong><code>30.79</code> MSE in <code>36 ms</code> at $T=1.0$</strong> vs <code>e-means</code> <strong><code>64.43</code> MSE in <code>40 ms</code> at $T=8.0$</strong>.
+        </li>
+      </ul>
+
+      <h3>Kernel Latency, Peak Workspace VRAM, and <code>k</code>-Scaling</h3>
+
+      <figure>
+        <img src="figures/fig3_speed_and_vram_kernels.png" alt="Kernel-level latency and peak VRAM comparison on A100" />
+        <figcaption>Kernel-level latency and peak VRAM comparison on A100</figcaption>
+      </figure>
+
+      <figure>
+        <img src="figures/fig4_k_scaling_speed_vram.png" alt="Scaling across k=128..2048" />
+        <figcaption>Scaling across k=128..2048</figcaption>
+      </figure>
+
+      <p>At <strong>1M points × 2,048 clusters (<code>mega_1m_d128_k2048</code>)</strong>:</p>
+
+      <ul>
+        <li>
+          On <strong>A100</strong>, <code>s-means</code> Custom Triton runs in <strong><code>61.1 ms</code></strong> (twice as fast as <code>e-means</code> Native PyTorch <code>123.3 ms</code> and within <code>1.31×</code> of CUDA-Graph <code>e-means</code> <code>46.6 ms</code>) while cutting peak workspace VRAM to <strong><code>71.2 MB</code></strong> (vs <code>84.6 MB</code> for <code>e-means</code> Triton and <code>309.8 MB</code> for <code>e-means</code> Native).
+        </li>
+        <li>
+          On <strong>L4</strong>, <code>s-means</code> Custom Triton runs in <strong><code>84.6 ms</code> vs <code>75.9 ms</code> (<code>1.114×</code>)</strong> at <strong><code>71.2 MB</code> vs <code>84.6 MB</code> (<code>0.842×</code>)</strong>, while cutting Test MSE from <code>69.75</code> to <strong><code>18.34</code> (<code>+73.70%</code>)</strong>.
+        </li>
+        <li>
+          On <strong>T4 (<code>SM75</code>)</strong>, Meta <code>Emeans(assignment_backend="auto")</code> raises <code>RuntimeError</code> on FP32 CUDA inputs, <code>emeans_triton_fp32</code> fails <code>PTXASError</code> due to <code>.bf16</code> inline assembly, and <code>emeans_triton_fp16</code> crashes with <code>OutOfResources: shared memory Required: 98304 &gt; 65536</code> for <code>d=128</code>. <code>s-means</code> Native FP32 completes <code>mega_1m_d128_k2048</code> in <strong><code>845.6 ms</code> vs <code>1109.4 ms</code> (<code>0.762×</code> faster!)</strong> using <strong><code>85.9 MB</code> vs <code>310.2 MB</code> (<code>0.277×</code>)</strong> VRAM, and <code>s-means</code> (<code>evolved_triton</code> / <code>evolved_emeans_triton</code>) drops workspace VRAM to <strong><code>68.9 MB</code> (<code>0.222×</code>)</strong>.
+        </li>
+      </ul>
+
+      <h3>Architectural Caveats &amp; Engineering Boundaries</h3>
+
+      <ol>
+        <li>
+          <strong>CUDA Graph Dispatch on Small Low-D Batches (<code>lowd_200k_d8_k512</code>):</strong> When $d \le 16$, the <code>quality</code> batch law selects small batches (<code>~392</code> steps). Upstream <code>e-means</code> captures static CUDA Graphs per step (<code>95.3 ms</code> on A100), whereas <code>s-means</code> currently executes an eager Python loop (<code>567.4 ms</code> on A100, <code>593.5 ms</code> on L4) while still delivering <strong><code>+23.4%</code> Test MSE reduction</strong> and <strong><code>0.875×</code> VRAM</strong>. Adding static CUDA Graph capture for fixed-shape steps is the clear next optimization.
+        </li>
+        <li>
+          <strong>Turing (<code>SM75</code>) Precision Choice:</strong> Because T4 lacks BF16/TF32 Tensor Cores, custom FP32 Triton assignment does not match cuBLAS FP32 <code>addmm</code> speed on T4. Accordingly, <a href="https://github.com/suayptalha/s-means/blob/main/smeans/_gpu.py#L36" target="_blank" rel="noopener"><code>smeans._gpu._resolve_backend</code></a> automatically selects BF16 Triton Tensor-Core kernels on <code>SM80+</code> and chunked Native <code>addmm</code> + CUB reductions on <code>&lt; SM80</code>.
+        </li>
+      </ol>
+    </section>
+
+    <hr class="section-sep" />
+
+    <section id="usage">
+      <h2>6. Using <code>s-means</code> Today</h2>
+
+      <p>
+        The full open-source package is available at <a href="https://github.com/suayptalha/s-means" target="_blank" rel="noopener"><code>github.com/suayptalha/s-means</code></a> with zero external dependency on upstream <code>e_means</code> code and passes the complete <code>scikit-learn</code> <code>check_estimator</code> test suite (<code>pytest -v</code>: <code>10 passed</code>).
+      </p>
+
+      <div class="code-wrapper">
+        <button class="copy-btn" type="button" onclick="copyCode(this)">Copy</button>
+        <pre><code>git clone https://github.com/suayptalha/s-means.git
+cd s-means
+pip install -e ".[triton]"</code></pre>
+      </div>
+
+      <p><strong>Drop-in <code>scikit-learn</code> Estimator:</strong></p>
+
+      <div class="code-wrapper">
+        <button class="copy-btn" type="button" onclick="copyCode(this)">Copy</button>
+        <pre><code>from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from smeans import SMeans
+
+pipe = Pipeline([
+    ("scaler", StandardScaler()),
+    ("cluster", SMeans(n_clusters=256, nepochs=1.5, device="auto", random_state=0)),
+])
+labels = pipe.fit_predict(X)</code></pre>
+      </div>
+
+      <p><strong>Zero-Copy PyTorch / Custom Triton Tensor API:</strong></p>
+
+      <div class="code-wrapper">
+        <button class="copy-btn" type="button" onclick="copyCode(this)">Copy</button>
+        <pre><code>import torch
+from smeans import smeans
+
+x = torch.randn(1_000_000, 128, device="cuda", dtype=torch.float32)
+res = smeans(x, n_clusters=2048, nepochs=3.0, seed=0, return_info=True)
+print(f"Backend={res.backend} ({res.dtype}) | MSE={res.mse:.2f} | Time={res.time_s*1e3:.1f}ms")</code></pre>
+      </div>
+    </section>
+
+    <hr class="section-sep" />
+
+    <section id="citation">
+      <h2>Citation</h2>
+
+      <p>
+        If you use <code>s-means</code> or reference our EvoForest discovery methodology in your research or engineering systems, please cite <a href="https://github.com/suayptalha/s-means" target="_blank" rel="noopener"><code>github.com/suayptalha/s-means</code></a> and EvoForest (<a href="https://arxiv.org/abs/2604.19761" target="_blank" rel="noopener">arXiv:2604.19761</a>).
+      </p>
+    </section>
+
+    <footer class="page-footer">
+      <span>s-means: outperforming e-means (which outperforms k-means)</span>
+      <span><a href="https://github.com/suayptalha/s-means" target="_blank" rel="noopener">github.com/suayptalha/s-means</a> · <a href="https://arxiv.org/abs/2604.19761" target="_blank" rel="noopener">EvoForest (arXiv:2604.19761)</a></span>
+    </footer>
+  </main>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      if (typeof renderMathInElement === "function") {
+        renderMathInElement(document.body, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false }
+          ],
+          ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+          throwOnError: false
+        });
+      }
+    });
+
+    function copyCode(btn) {
+      const code = btn.parentElement.querySelector("code").innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const prev = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = prev; }, 1400);
+      });
+    }
+  </script>
+</body>
+</html>
