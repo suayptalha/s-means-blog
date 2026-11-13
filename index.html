@@ -513,10 +513,10 @@
           <strong>1.0 epoch beats 8.0-epoch <code>e-means</code>:</strong> On <code>200k × 128D, k=1024</code>, <code>s-means</code> at <strong>$T = 1.0$ epoch</strong> achieves <strong><code>32.2</code> Test MSE in <code>33 ms</code></strong> on A100 (and <code>30.8</code> MSE in <code>36 ms</code> on L4), more than <strong>2× lower quantization error</strong> than <code>e-means</code> at <strong>$T = 8.0$ epochs</strong> (<code>65.7</code> MSE in <code>36 ms</code> on A100; <code>64.4</code> MSE in <code>40 ms</code> on L4).
         </li>
         <li>
-          <strong>Lower GPU peak workspace VRAM:</strong> <strong><code>0.875×</code> median peak VRAM delta</strong> vs <code>e-means</code> BF16 Triton on L4/A100 (<code>71.2 MB</code> vs <code>84.6 MB</code> at 1M points / <code>k=2048</code>, and <strong>4.35× lower</strong> than PyTorch Native <code>309.8 MB</code>), and <strong><code>0.360×</code> median peak VRAM</strong> (<code>0.222×</code> at <code>1M × k=2048</code>) on T4.
+          <strong>Lower GPU peak workspace VRAM:</strong> <strong><code>0.875×</code> median peak VRAM delta</strong> vs <code>e-means</code> BF16 Triton on L4/A100 (<code>71.2 MB</code> vs <code>84.6 MB</code> at 1M points / <code>k=2048</code>, and <strong>4.35× lower</strong> than PyTorch Native <code>309.8 MB</code>), and on T4 <strong><code>0.658×</code> median peak VRAM</strong> with <code>backend="auto"</code> (<code>evolved_native</code>, <code>0.277×</code> at <code>1M × k=2048</code>) or <strong><code>0.360×</code> median peak VRAM</strong> (<code>0.222×</code> at <code>1M × k=2048</code>) with <code>backend="triton"</code>.
         </li>
         <li>
-          <strong>Superior Turing (<code>SM75</code>) hardware coverage:</strong> Upstream <code>e-means</code> <code>auto</code>/Triton paths fail on NVIDIA T4 (<code>SM75</code>) due to BF16 casting, <code>.bf16</code> PTX inline assembly, and <code>&gt;64 KB</code> shared-memory tiles. <code>s-means</code> runs cleanly across all 9 T4 workloads, beating Meta's native T4 baseline by <strong><code>+53.81%–+54.03%</code> MSE</strong>, <strong><code>0.881×</code> faster wall-clock latency</strong>, and <strong><code>0.360×</code> VRAM</strong>.
+          <strong>Superior Turing (<code>SM75</code>) hardware coverage:</strong> Upstream <code>e-means</code> <code>auto</code>/Triton paths fail on NVIDIA T4 (<code>SM75</code>) due to BF16 casting, <code>.bf16</code> PTX inline assembly, and <code>&gt;64 KB</code> shared-memory tiles. <code>s-means</code> runs cleanly across all 9 T4 workloads: <code>backend="auto"</code> (<code>evolved_native</code>) beats Meta's native T4 baseline by <strong><code>+53.81%</code> mean MSE</strong>, <strong><code>0.881×</code> median wall-clock latency</strong>, and <strong><code>0.658×</code> median VRAM</strong>, while <code>evolved_triton</code> pushes mean MSE gain to <strong><code>+54.03%</code></strong> and median VRAM down to <strong><code>0.360×</code></strong> at <strong><code>4.586×</code></strong> median wall-clock latency (as Turing lacks BF16/TF32 Tensor Cores).
         </li>
         <li>
           <strong>Strong CPU generalization with parity speed and memory:</strong> Across 12 strictly unseen CPU datasets (5 seeds each), <code>s-means</code> achieves <strong><code>+19.67%</code> mean Test MSE gain</strong> (<code>+21.30%</code> Train, <code>0</code> regressions) at <strong><code>0.977×</code> median CPU time vs <code>e-means</code></strong> (<strong><code>2.24×</code> median faster than equal-epoch <code>sklearn.cluster.MiniBatchKMeans</code></strong>, faster on 8/12 tasks up to <code>3.71×</code> while <code>sklearn</code> is faster on small/low-d workloads at <code>0.40×–0.98×</code>) with <strong><code>0.0 MB</code> extra OS RSS overhead</strong>.
@@ -535,7 +535,7 @@
 
       <ol>
         <li>Random row sampling for initial centroids,</li>
-        <li>Periodic dead-cluster revival (every 5 steps when usage drops below <code>0.1 * mean(usage)</code>, disabled for $d &lt; 16$),</li>
+        <li>Periodic dead-cluster revival (every 5 steps when usage drops below <code>0.1 * mean(usage)</code>, disabled by default for $d \le 2$),</li>
         <li>Multiplicative jitter perturbations <code>c * (1 ± 1e-4 * r)</code> splitting high-usage donors, and</li>
         <li>Uniform averaging of the final pass (<code>pass_sums / pass_counts</code>).</li>
       </ol>
@@ -604,7 +604,7 @@
               <td class="left"><strong><code>v1</code></strong> (Step 3)</td>
               <td class="left"><strong>RMS Distortion Revival + $d \ge 1$</strong></td>
               <td class="center"><code>10.76</code></td>
-              <td class="left">Replaced count-only splits with per-cluster <code>sse_ema</code> tracking and shift-invariant RMS split radius across all dimensions (<code>revive_min_d = 1</code>)</td>
+              <td class="left">Replaced count-only splits with per-cluster <code>sse_ema</code> tracking and shift-invariant RMS split radius across all dimensions (<code>revive_min_d = 1</code>, extending upstream's $d \ge 3$ threshold)</td>
             </tr>
             <tr>
               <td class="left"><strong><code>v3</code></strong> (Step 6)</td>
@@ -827,7 +827,7 @@
       <h3>What Actually Matters? (Leave-One-Out Component Ablation)</h3>
 
       <p>
-        In the right panel of <strong>Figure 5</strong>, disabling <strong>Distortion &amp; Anisotropic Revival</strong> collapses the mean unseen Test MSE gain from <strong><code>+19.86%</code> to <code>+7.09%</code></strong> (<code>-12.77</code> points). Removing <strong>Subsampled $D^{1.5}$ Init</strong> costs <code>-2.64</code> points, disabling <strong>Low-D Revival (<code>d &lt; 16</code>)</strong> costs <code>-1.19</code> points, and removing <strong>Cache Tiling (<code>512×256</code>)</strong> matches accuracy (<code>+19.86%</code>) while letting median CPU runtime stay fast vs unblocked alternatives.
+        In the right panel of <strong>Figure 5</strong>, disabling <strong>Distortion &amp; Anisotropic Revival</strong> collapses the mean unseen Test MSE gain from <strong><code>+19.86%</code> to <code>+7.09%</code></strong> (<code>-12.77</code> points). Removing <strong>Subsampled $D^{1.5}$ Init</strong> costs <code>-2.64</code> points, restricting revival to <strong><code>d ≥ 16</code> only</strong> (<code>revive_min_d = 16</code>, disabling low-D revival on $d &lt; 16$ tasks) costs <code>-1.19</code> points, and removing <strong>Cache Tiling (<code>512×256</code>)</strong> matches accuracy (<code>+19.86%</code>) while letting median CPU runtime stay fast vs unblocked alternatives.
       </p>
     </section>
 
@@ -881,7 +881,7 @@
             <tr>
               <th class="left">Workload</th>
               <th class="left">Specs (<code>n, d, k, T</code>)</th>
-              <th class="center">T4 <code>s-means</code> MSE Gain (vs Native)</th>
+              <th class="center">T4 <code>s-means</code> MSE Gain (Tri / Nat vs Native)</th>
               <th class="center">L4 <code>s-means</code> MSE Gain (vs Triton)</th>
               <th class="center">A100 <code>s-means</code> MSE Gain (vs Triton)</th>
               <th class="center">A100 Peak VRAM Ratio</th>
@@ -963,7 +963,7 @@
             <tr class="summary-row">
               <td class="left"><strong>Mean Across All 9</strong></td>
               <td class="left">—</td>
-              <td class="center"><strong><code>+54.03%</code></strong></td>
+              <td class="center"><strong><code>+54.03%</code> Tri / <code>+53.81%</code> Nat</strong></td>
               <td class="center"><strong><code>+54.35%</code></strong></td>
               <td class="center"><strong><code>+55.21%</code></strong></td>
               <td class="center"><strong>Med <code>0.875×</code></strong></td>
@@ -1014,7 +1014,7 @@
           On <strong>L4</strong>, <code>s-means</code> Custom Triton runs in <strong><code>84.6 ms</code> vs <code>75.9 ms</code> (<code>1.114×</code>)</strong> at <strong><code>71.2 MB</code> vs <code>84.6 MB</code> (<code>0.842×</code>)</strong>, while cutting Test MSE from <code>69.75</code> to <strong><code>18.34</code> (<code>+73.70%</code>)</strong>.
         </li>
         <li>
-          On <strong>T4 (<code>SM75</code>)</strong>, Meta <code>Emeans(assignment_backend="auto")</code> raises <code>RuntimeError</code> on FP32 CUDA inputs, <code>emeans_triton_fp32</code> fails <code>PTXASError</code> due to <code>.bf16</code> inline assembly, and <code>emeans_triton_fp16</code> crashes with <code>OutOfResources: shared memory Required: 98304 &gt; 65536</code> for <code>d=128</code>. <code>s-means</code> Native FP32 completes <code>mega_1m_d128_k2048</code> in <strong><code>845.6 ms</code> vs <code>1109.4 ms</code> (<code>0.762×</code> faster!)</strong> using <strong><code>85.9 MB</code> vs <code>310.2 MB</code> (<code>0.277×</code>)</strong> VRAM, and <code>s-means</code> (<code>evolved_triton</code> / <code>evolved_emeans_triton</code>) drops workspace VRAM to <strong><code>68.9 MB</code> (<code>0.222×</code>)</strong>.
+          On <strong>T4 (<code>SM75</code>)</strong>, Meta <code>Emeans(assignment_backend="auto")</code> raises <code>RuntimeError</code> on FP32 CUDA inputs, <code>emeans_triton_fp32</code> fails <code>PTXASError</code> due to <code>.bf16</code> inline assembly, and <code>emeans_triton_fp16</code> crashes with <code>OutOfResources: shared memory Required: 98304 &gt; 65536</code> for <code>d=128</code>. <code>s-means</code> Native FP32 (<code>backend="auto"</code> on T4) completes <code>mega_1m_d128_k2048</code> in <strong><code>845.6 ms</code> vs <code>1109.4 ms</code> (<code>0.762×</code> faster!)</strong> using <strong><code>85.9 MB</code> vs <code>310.2 MB</code> (<code>0.277×</code>)</strong> VRAM (across all 9 T4 workloads: <strong><code>+53.81%</code></strong> mean MSE, <strong><code>0.881×</code></strong> median latency, <strong><code>0.658×</code></strong> median VRAM). Switching explicitly to <code>evolved_triton</code> further drops workspace VRAM to <strong><code>68.9 MB</code> (<code>0.222×</code>)</strong> on <code>1M × k=2048</code> (<strong><code>0.360×</code></strong> median VRAM and <strong><code>+54.03%</code></strong> mean MSE across all 9), at the cost of slower FP32 Triton latency (<strong><code>5317.7 ms</code> / <code>4.794×</code></strong> on <code>1M × k=2048</code>; <strong><code>4.586×</code></strong> median latency across all 9).
         </li>
       </ul>
 
@@ -1025,7 +1025,7 @@
           <strong>CUDA Graph Dispatch on Small Low-D Batches (<code>lowd_200k_d8_k512</code>):</strong> When $d \le 16$, the <code>quality</code> batch law selects small batches (<code>~392</code> steps). Upstream <code>e-means</code> captures static CUDA Graphs per step (<code>95.3 ms</code> on A100), whereas <code>s-means</code> currently executes an eager Python loop (<code>567.4 ms</code> on A100, <code>593.5 ms</code> on L4) while still delivering <strong><code>+23.4%</code> Test MSE reduction</strong> and <strong><code>0.875×</code> VRAM</strong>. Adding static CUDA Graph capture for fixed-shape steps is the clear next optimization.
         </li>
         <li>
-          <strong>Turing (<code>SM75</code>) Precision Choice:</strong> Because T4 lacks BF16/TF32 Tensor Cores, custom FP32 Triton assignment does not match cuBLAS FP32 <code>addmm</code> speed on T4. Accordingly, <a href="https://github.com/suayptalha/s-means/blob/main/smeans/_gpu.py#L36" target="_blank" rel="noopener"><code>smeans._gpu._resolve_backend</code></a> automatically selects BF16 Triton Tensor-Core kernels on <code>SM80+</code> and chunked Native <code>addmm</code> + CUB reductions on <code>&lt; SM80</code>.
+          <strong>Turing (<code>SM75</code>) Precision Choice:</strong> Because T4 lacks BF16/TF32 Tensor Cores, custom FP32 Triton assignment does not match cuBLAS FP32 <code>addmm</code> speed on T4 (<code>4.586×</code> median latency for Triton vs <code>0.881×</code> for chunked Native FP32 <code>addmm</code>). Accordingly, <a href="https://github.com/suayptalha/s-means/blob/main/smeans/_gpu.py#L36" target="_blank" rel="noopener"><code>smeans._gpu._resolve_backend</code></a> automatically selects BF16 Triton Tensor-Core kernels on <code>SM80+</code> and chunked Native <code>addmm</code> + CUB reductions on <code>&lt; SM80</code>.
         </li>
       </ol>
     </section>
